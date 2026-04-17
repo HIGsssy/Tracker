@@ -249,6 +249,30 @@ describe('refreshTracker — falls back to new post on Unknown Message', () => {
   });
 });
 
+describe('refreshTracker — outer channel fetch fails with 10003', () => {
+  it('clears trackerChannelId and trackerMessageId in DB and throws TrackerError', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ trackerMessageId: MESSAGE_ID }));
+
+    // Seed DB with non-null channel and message IDs so we can assert they are cleared.
+    db.update(guildTrackerConfig)
+      .set({ trackerChannelId: CHANNEL_ID, trackerMessageId: MESSAGE_ID })
+      .run();
+
+    const unknownChannelError = Object.assign(new Error('Unknown Channel'), { code: 10003 });
+    const client = {
+      channels: {
+        fetch: vi.fn().mockRejectedValue(unknownChannelError),
+      },
+    } as unknown as Client;
+
+    await expect(refreshTracker(GUILD_ID, client)).rejects.toThrow(TrackerError);
+
+    const row = db.select().from(guildTrackerConfig).limit(1).get();
+    expect(row?.trackerChannelId).toBeNull();
+    expect(row?.trackerMessageId).toBeNull();
+  });
+});
+
 describe('refreshTracker — new message ID is stored in DB', () => {
   it('stores new message ID returned from channel.send', async () => {
     mockGetGuildConfig.mockReturnValue(makeConfig({ trackerMessageId: null }));

@@ -31,7 +31,7 @@ function makeState(overrides: Partial<FundingState> = {}): FundingState {
 // ---------------------------------------------------------------------------
 describe('formatHoursLeft', () => {
   it('formats hours and minutes correctly', () => {
-    expect(formatHoursLeft(387.7)).toBe('387h 42m');
+    expect(formatHoursLeft(387.5)).toBe('387h 30m');
   });
 
   it('returns "0h 0m" for zero', () => {

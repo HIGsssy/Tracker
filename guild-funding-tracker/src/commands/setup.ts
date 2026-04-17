@@ -3,7 +3,7 @@
 import { ChannelType, PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
 import type { TextChannel } from 'discord.js';
 import { upsertGuildConfig, ValidationError, type UpsertConfigParams } from '../services/fundingService';
-import { refreshTracker } from '../services/trackerService';
+import { refreshTracker, TrackerError } from '../services/trackerService';
 import { MIN_HOURLY_COST, MAX_HOURLY_COST } from '../constants/validation';
 
 export async function handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -85,6 +85,8 @@ export async function handleSetup(interaction: ChatInputCommandInteraction): Pro
   } catch (err) {
     console.error('[setup] Error during /funding setup:', err);
     if (err instanceof ValidationError) {
+      await interaction.editReply(err.message).catch(() => {});
+    } else if (err instanceof TrackerError) {
       await interaction.editReply(err.message).catch(() => {});
     } else {
       await interaction.editReply(

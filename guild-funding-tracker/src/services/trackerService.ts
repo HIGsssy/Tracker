@@ -82,7 +82,7 @@ export async function refreshTracker(guildId: string, client: Client): Promise<v
     if (isDiscordApiError(err, 10003)) {
       // Unknown Channel — clear stored IDs so admin knows to re-run setup.
       db.update(guildTrackerConfig)
-        .set({ trackerChannelId: null, trackerMessageId: null, updatedAt: nowIso })
+        .set({ trackerChannelId: null, trackerMessageId: null })
         .where(eq(guildTrackerConfig.guildId, guildId))
         .run();
       throw new TrackerError(
