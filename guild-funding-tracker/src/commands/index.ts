@@ -1,13 +1,19 @@
 // Command routing table. Maps "commandName:subcommand" to handler functions.
-// Only Phase 3 commands are registered here.
+// Phase 3: setup. Phase 4: add, remove, status.
 
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { handleSetup } from './setup';
+import { handleAdd } from './add';
+import { handleRemove } from './remove';
+import { handleStatus } from './status';
 
 type CommandHandler = (interaction: ChatInputCommandInteraction) => Promise<void>;
 
 const handlers: Record<string, CommandHandler> = {
   'funding:setup': handleSetup,
+  'funding:add': handleAdd,
+  'funding:remove': handleRemove,
+  'funding:status': handleStatus,
 };
 
 /**

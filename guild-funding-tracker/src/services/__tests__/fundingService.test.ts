@@ -30,6 +30,10 @@ import {
   getGuildConfig,
   upsertGuildConfig,
   getMonthTotal,
+  addDonation,
+  removeDonation,
+  getDonationRecord,
+  getMonthRecords,
   ValidationError,
 } from '../fundingService';
 
@@ -161,5 +165,187 @@ describe('getMonthTotal', () => {
     expect(getMonthTotal(GUILD_A, '2026-04')).toBeCloseTo(15.5);
     expect(getMonthTotal(GUILD_A, '2026-03')).toBe(20);
     expect(getMonthTotal(GUILD_B, '2026-04')).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// addDonation
+// ---------------------------------------------------------------------------
+
+describe('addDonation', () => {
+  it('inserts a record and returns it', () => {
+    const record = addDonation(GUILD_A, 10.00, 'user-1');
+    expect(record.id).toBeGreaterThan(0);
+    expect(record.guildId).toBe(GUILD_A);
+    expect(record.amount).toBe(10.00);
+    expect(record.createdByUserId).toBe('user-1');
+  });
+
+  it('assigns the current UTC month_key', () => {
+    const before = new Date();
+    const record = addDonation(GUILD_A, 5.00, 'user-1');
+    const expected = `${before.getUTCFullYear()}-${String(before.getUTCMonth() + 1).padStart(2, '0')}`;
+    expect(record.monthKey).toBe(expected);
+  });
+
+  it('stores optional donor_name and note', () => {
+    const record = addDonation(GUILD_A, 20.00, 'user-1', 'Alice', 'Monthly sub');
+    expect(record.donorName).toBe('Alice');
+    expect(record.note).toBe('Monthly sub');
+  });
+
+  it('stores null when donor_name and note are omitted', () => {
+    const record = addDonation(GUILD_A, 5.00, 'user-1');
+    expect(record.donorName).toBeNull();
+    expect(record.note).toBeNull();
+  });
+
+  it('affects getMonthTotal for the correct guild and month', () => {
+    addDonation(GUILD_A, 12.50, 'user-1');
+    addDonation(GUILD_A, 7.50, 'user-2');
+    const now = new Date();
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    expect(getMonthTotal(GUILD_A, monthKey)).toBeCloseTo(20.00);
+  });
+
+  it('does not affect totals for a different guild', () => {
+    addDonation(GUILD_A, 50.00, 'user-1');
+    const now = new Date();
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    expect(getMonthTotal(GUILD_B, monthKey)).toBe(0);
+  });
+
+  it('throws ValidationError for amount = 0', () => {
+    expect(() => addDonation(GUILD_A, 0, 'user-1')).toThrow(ValidationError);
+  });
+
+  it('throws ValidationError for negative amount', () => {
+    expect(() => addDonation(GUILD_A, -5, 'user-1')).toThrow(ValidationError);
+  });
+
+  it('throws ValidationError for NaN', () => {
+    expect(() => addDonation(GUILD_A, NaN, 'user-1')).toThrow(ValidationError);
+  });
+
+  it('throws ValidationError for Infinity', () => {
+    expect(() => addDonation(GUILD_A, Infinity, 'user-1')).toThrow(ValidationError);
+  });
+
+  it('throws ValidationError for amount below MIN_DONATION_AMOUNT', () => {
+    expect(() => addDonation(GUILD_A, 0.009, 'user-1')).toThrow(ValidationError);
+  });
+
+  it('accepts the minimum valid amount', () => {
+    expect(() => addDonation(GUILD_A, 0.01, 'user-1')).not.toThrow();
+  });
+
+  it('throws ValidationError for amount above MAX_DONATION_AMOUNT', () => {
+    expect(() => addDonation(GUILD_A, 100_000.01, 'user-1')).toThrow(ValidationError);
+  });
+
+  it('accepts the maximum valid amount', () => {
+    expect(() => addDonation(GUILD_A, 100_000.00, 'user-1')).not.toThrow();
+  });
+
+  it('does not insert a row when validation fails', () => {
+    expect(() => addDonation(GUILD_A, -1, 'user-1')).toThrow();
+    const rows = db.select().from(donationRecord).all();
+    expect(rows).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeDonation
+// ---------------------------------------------------------------------------
+
+describe('removeDonation', () => {
+  it('removes the record and returns true', () => {
+    const record = addDonation(GUILD_A, 10.00, 'user-1');
+    const result = removeDonation(GUILD_A, record.id);
+    expect(result).toBe(true);
+    const rows = db.select().from(donationRecord).all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('returns false for a non-existent record ID', () => {
+    const result = removeDonation(GUILD_A, 99999);
+    expect(result).toBe(false);
+  });
+
+  it('returns false when the record exists but belongs to another guild', () => {
+    const record = addDonation(GUILD_B, 10.00, 'user-1');
+    const result = removeDonation(GUILD_A, record.id);
+    expect(result).toBe(false);
+    // Record must still exist in DB.
+    const rows = db.select().from(donationRecord).all();
+    expect(rows).toHaveLength(1);
+  });
+
+  it('does not affect other records for the same guild', () => {
+    const r1 = addDonation(GUILD_A, 10.00, 'user-1');
+    const r2 = addDonation(GUILD_A, 20.00, 'user-2');
+    removeDonation(GUILD_A, r1.id);
+    const remaining = db.select().from(donationRecord).all();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.id).toBe(r2.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getDonationRecord
+// ---------------------------------------------------------------------------
+
+describe('getDonationRecord', () => {
+  it('returns the record when it exists for the guild', () => {
+    const inserted = addDonation(GUILD_A, 15.00, 'user-1');
+    const found = getDonationRecord(GUILD_A, inserted.id);
+    expect(found).not.toBeNull();
+    expect(found!.id).toBe(inserted.id);
+  });
+
+  it('returns null for a non-existent ID', () => {
+    expect(getDonationRecord(GUILD_A, 99999)).toBeNull();
+  });
+
+  it('returns null when the record belongs to a different guild', () => {
+    const inserted = addDonation(GUILD_B, 15.00, 'user-1');
+    expect(getDonationRecord(GUILD_A, inserted.id)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getMonthRecords
+// ---------------------------------------------------------------------------
+
+describe('getMonthRecords', () => {
+  it('returns only records for the given guild and month', () => {
+    db.insert(donationRecord).values([
+      { guildId: GUILD_A, monthKey: '2026-04', amount: 10, recordedAt: new Date().toISOString(), createdByUserId: 'u1' },
+      { guildId: GUILD_A, monthKey: '2026-03', amount: 20, recordedAt: new Date().toISOString(), createdByUserId: 'u2' },
+      { guildId: GUILD_B, monthKey: '2026-04', amount: 30, recordedAt: new Date().toISOString(), createdByUserId: 'u3' },
+    ]).run();
+
+    const records = getMonthRecords(GUILD_A, '2026-04');
+    expect(records).toHaveLength(1);
+    expect(records[0]!.amount).toBe(10);
+    expect(records[0]!.guildId).toBe(GUILD_A);
+  });
+
+  it('returns an empty array when no records match', () => {
+    expect(getMonthRecords(GUILD_A, '2026-04')).toHaveLength(0);
+  });
+
+  it('returns records in descending ID order (newest first)', () => {
+    db.insert(donationRecord).values([
+      { guildId: GUILD_A, monthKey: '2026-04', amount: 5, recordedAt: new Date().toISOString(), createdByUserId: 'u1' },
+      { guildId: GUILD_A, monthKey: '2026-04', amount: 15, recordedAt: new Date().toISOString(), createdByUserId: 'u2' },
+      { guildId: GUILD_A, monthKey: '2026-04', amount: 10, recordedAt: new Date().toISOString(), createdByUserId: 'u3' },
+    ]).run();
+
+    const records = getMonthRecords(GUILD_A, '2026-04');
+    expect(records).toHaveLength(3);
+    // Each subsequent record should have a lower ID than the previous (newest first).
+    expect(records[0]!.id).toBeGreaterThan(records[1]!.id);
+    expect(records[1]!.id).toBeGreaterThan(records[2]!.id);
   });
 });

@@ -39,6 +39,47 @@ const fundingCommand = new SlashCommandBuilder()
           .setMinValue(MIN_HOURLY_COST)
           .setMaxValue(MAX_HOURLY_COST),
       ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('add')
+      .setDescription('Record a funding contribution for the current month')
+      .addNumberOption((opt) =>
+        opt
+          .setName('amount')
+          .setDescription('Dollar amount (e.g. 12.50)')
+          .setRequired(true)
+          .setMinValue(0.01),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('donor_name')
+          .setDescription('Optional label for this contribution')
+          .setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('note')
+          .setDescription('Optional free-text note')
+          .setRequired(false),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('remove')
+      .setDescription('Remove a specific donation record')
+      .addIntegerOption((opt) =>
+        opt
+          .setName('record_id')
+          .setDescription('ID of the donation record to remove')
+          .setRequired(true)
+          .setMinValue(1),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('status')
+      .setDescription('View current funding status'),
   );
 
 async function main(): Promise<void> {
