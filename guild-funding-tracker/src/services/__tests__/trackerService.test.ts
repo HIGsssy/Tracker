@@ -290,3 +290,126 @@ describe('refreshTracker — new message ID is stored in DB', () => {
     expect(row?.trackerMessageId).toBe('stored-msg-id');
   });
 });
+
+// ---------------------------------------------------------------------------
+// refreshTracker — return value
+// ---------------------------------------------------------------------------
+
+describe('refreshTracker — return value', () => {
+  it('returns { action: "edited" } when existing message was edited', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ trackerMessageId: MESSAGE_ID }));
+    const client = makeClient();
+    const result = await refreshTracker(GUILD_ID, client);
+    expect(result.action).toBe('edited');
+  });
+
+  it('returns { action: "reposted" } when no message ID existed (new post)', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ trackerMessageId: null }));
+    const client = makeClient();
+    const result = await refreshTracker(GUILD_ID, client);
+    expect(result.action).toBe('reposted');
+  });
+
+  it('returns { action: "reposted" } when existing message was gone (10008 fallback)', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ trackerMessageId: MESSAGE_ID }));
+    const unknownMessageError = Object.assign(new Error('Unknown Message'), { code: 10008 });
+    const channel = {
+      type: ChannelType.GuildText,
+      messages: { edit: vi.fn().mockRejectedValue(unknownMessageError) },
+      send: vi.fn().mockResolvedValue({ id: 'fallback-msg' }),
+    };
+    const client = makeClient(channel);
+    const result = await refreshTracker(GUILD_ID, client);
+    expect(result.action).toBe('reposted');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// refreshIfStale
+// ---------------------------------------------------------------------------
+
+import { refreshIfStale } from '../trackerService';
+
+describe('refreshIfStale — returns early guards', () => {
+  it('returns early when config is null', async () => {
+    mockGetGuildConfig.mockReturnValue(null);
+    const client = makeClient();
+    await expect(refreshIfStale(GUILD_ID, client)).resolves.toBeUndefined();
+    expect(client.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns early when tracker is disabled', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ enabled: false }));
+    const client = makeClient();
+    await expect(refreshIfStale(GUILD_ID, client)).resolves.toBeUndefined();
+    expect(client.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns early when no tracker channel', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ trackerChannelId: null }));
+    const client = makeClient();
+    await expect(refreshIfStale(GUILD_ID, client)).resolves.toBeUndefined();
+    expect(client.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns early when no tracker message ID', async () => {
+    mockGetGuildConfig.mockReturnValue(makeConfig({ trackerMessageId: null }));
+    const client = makeClient();
+    await expect(refreshIfStale(GUILD_ID, client)).resolves.toBeUndefined();
+    expect(client.channels.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns early when embed is within the freshness threshold', async () => {
+    // Updated 1 hour ago; threshold is 6 hours in the mocked config.
+    const freshUpdatedAt = new Date(Date.now() - 1 * 3_600_000).toISOString();
+    mockGetGuildConfig.mockReturnValue({
+      ...makeConfig({ trackerMessageId: MESSAGE_ID }),
+      updatedAt: freshUpdatedAt,
+    });
+    const client = makeClient();
+    await refreshIfStale(GUILD_ID, client);
+    expect(client.channels.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('refreshIfStale — stale embed triggers refresh', () => {
+  it('calls refreshTracker (via channel.messages.edit) when embed is stale', async () => {
+    // Updated 7 hours ago; threshold is 6 hours.
+    const staleUpdatedAt = new Date(Date.now() - 7 * 3_600_000).toISOString();
+    mockGetGuildConfig.mockReturnValue({
+      ...makeConfig({ trackerMessageId: MESSAGE_ID }),
+      updatedAt: staleUpdatedAt,
+    });
+    const mockEdit = vi.fn().mockResolvedValue(undefined);
+    const channel = {
+      type: ChannelType.GuildText,
+      messages: { edit: mockEdit },
+      send: vi.fn(),
+    };
+    const client = makeClient(channel);
+
+    await refreshIfStale(GUILD_ID, client);
+
+    // refreshTracker ran and edited the existing message.
+    expect(mockEdit).toHaveBeenCalledOnce();
+  });
+
+  it('does not call channel.messages.edit when embed is not yet stale', async () => {
+    const freshUpdatedAt = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    mockGetGuildConfig.mockReturnValue({
+      ...makeConfig({ trackerMessageId: MESSAGE_ID }),
+      updatedAt: freshUpdatedAt,
+    });
+    const mockEdit = vi.fn();
+    const channel = {
+      type: ChannelType.GuildText,
+      messages: { edit: mockEdit },
+      send: vi.fn(),
+    };
+    const client = makeClient(channel);
+
+    await refreshIfStale(GUILD_ID, client);
+
+    expect(mockEdit).not.toHaveBeenCalled();
+  });
+});

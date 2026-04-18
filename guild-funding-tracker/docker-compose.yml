@@ -1,6 +1,6 @@
 version: "3.9"
 services:
-  guild-funding-tracker:
+  bot:
     build:
       context: .
       dockerfile: Dockerfile
@@ -14,6 +14,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # Authoritative test runner — uses the builder stage which has all dev deps
+  # and compiles better-sqlite3 native bindings inside the container.
+  # Run via: npm run docker:test  (or: docker compose run --rm test)
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    command: npm test
 
 volumes:
   tracker_data:

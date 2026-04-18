@@ -80,6 +80,47 @@ const fundingCommand = new SlashCommandBuilder()
     sub
       .setName('status')
       .setDescription('View current funding status'),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('set-hourly-cost')
+      .setDescription('Update the hourly server cost used for coverage calculations')
+      .addNumberOption((opt) =>
+        opt
+          .setName('cost')
+          .setDescription(
+            `New hourly cost in USD (min: ${MIN_HOURLY_COST}, max: ${MAX_HOURLY_COST})`,
+          )
+          .setRequired(true)
+          .setMinValue(MIN_HOURLY_COST)
+          .setMaxValue(MAX_HOURLY_COST),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('config')
+      .setDescription('View or update funding tracker configuration')
+      .addStringOption((opt) =>
+        opt
+          .setName('title')
+          .setDescription('New display title for the tracker embed')
+          .setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('display_mode')
+          .setDescription('Tracker embed display style')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Standard', value: 'standard' },
+            { name: 'Minimal', value: 'minimal' },
+          ),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('refresh')
+      .setDescription('Force re-render and re-post the tracker embed (use to recover after deletion)'),
   );
 
 async function main(): Promise<void> {

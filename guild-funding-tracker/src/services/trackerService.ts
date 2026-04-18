@@ -9,6 +9,7 @@ import { getGuildConfig, getMonthTotal } from './fundingService';
 import { computeFundingState, getCurrentMonthKey } from './calculationService';
 import { buildFundingEmbed } from '../renderer/embedBuilder';
 import type { EmbedConfigInput } from '../types/funding';
+import { config } from '../config/env';
 
 export class TrackerError extends Error {
   constructor(message: string) {
@@ -37,7 +38,9 @@ function isDiscordApiError(err: unknown, code: number): boolean {
  * - If no valid message exists: post new message, store ID.
  * - On success (either path): update updated_at in DB.
  */
-export async function refreshTracker(guildId: string, client: Client): Promise<void> {
+export type RefreshTrackerResult = { action: 'edited' | 'reposted' };
+
+export async function refreshTracker(guildId: string, client: Client): Promise<RefreshTrackerResult> {
   const cfg = getGuildConfig(guildId);
 
   if (!cfg) {
@@ -102,7 +105,7 @@ export async function refreshTracker(guildId: string, client: Client): Promise<v
         .set({ updatedAt: nowIso })
         .where(eq(guildTrackerConfig.guildId, guildId))
         .run();
-      return;
+      return { action: 'edited' };
     } catch (err) {
       if (isDiscordApiError(err, 10008) || isDiscordApiError(err, 10003)) {
         // Message is gone — fall through to post a new one.
@@ -119,4 +122,34 @@ export async function refreshTracker(guildId: string, client: Client): Promise<v
     .set({ trackerMessageId: message.id, updatedAt: nowIso })
     .where(eq(guildTrackerConfig.guildId, guildId))
     .run();
+  return { action: 'reposted' };
+}
+
+/**
+ * Checks whether the posted tracker embed is older than the configured stale threshold.
+ * If stale, triggers a full refresh. Returns early without refreshing if:
+ * - guild is not enabled
+ * - no tracker channel is configured
+ * - no tracker message ID is stored (nothing to compare age against)
+ * - embed is within the freshness threshold
+ *
+ * Triggered only from: ready.ts startup, /funding status after reply.
+ * No timers, no polling.
+ */
+export async function refreshIfStale(guildId: string, client: Client): Promise<void> {
+  const cfg = getGuildConfig(guildId);
+
+  if (!cfg || !cfg.enabled || !cfg.trackerChannelId || !cfg.trackerMessageId) {
+    return;
+  }
+
+  const thresholdMs = config.STALE_EMBED_THRESHOLD_HOURS * 3_600_000;
+  const lastUpdated = new Date(cfg.updatedAt).getTime();
+
+  if (Date.now() - lastUpdated < thresholdMs) {
+    return;
+  }
+
+  console.log(`[trackerService] Guild ${guildId}: embed is stale, refreshing.`);
+  await refreshTracker(guildId, client);
 }

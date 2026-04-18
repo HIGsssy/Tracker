@@ -1,11 +1,12 @@
 // /funding status — shows current funding state as an ephemeral embed.
 // Available to all guild members; admins also see financial details.
-// Does NOT refresh the posted tracker embed — that is add/remove's responsibility.
+// After sending the response, fires a stale-embed refresh in the background.
 
 import { PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
 import { getGuildConfig, getMonthTotal, getMonthRecords } from '../services/fundingService';
 import { computeFundingState, getCurrentMonthKey } from '../services/calculationService';
 import { buildFundingEmbed } from '../renderer/embedBuilder';
+import { refreshIfStale } from '../services/trackerService';
 import type { EmbedConfigInput } from '../types/funding';
 
 export async function handleStatus(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -54,6 +55,14 @@ export async function handleStatus(interaction: ChatInputCommandInteraction): Pr
     }
 
     await interaction.editReply({ embeds: [embed] });
+
+    // Fire-and-forget stale refresh: runs AFTER the reply is sent.
+    // Errors are logged only — they must not affect the user's ephemeral response.
+    if (interaction.guildId) {
+      refreshIfStale(interaction.guildId, interaction.client).catch((err) => {
+        console.error('[status] Stale refresh failed:', err);
+      });
+    }
   } catch (err) {
     console.error('[status] Error during /funding status:', err);
     await interaction

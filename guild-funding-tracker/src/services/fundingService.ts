@@ -24,6 +24,7 @@ export interface UpsertConfigParams {
   trackerMessageId?: string | null;
   hourlyCost?: number;
   displayTitle?: string;
+  publicDisplayMode?: 'standard' | 'minimal';
   updatedAt?: string;
 }
 
@@ -66,6 +67,7 @@ export function upsertGuildConfig(
     if (partial.trackerMessageId !== undefined) updates['trackerMessageId'] = partial.trackerMessageId;
     if (partial.hourlyCost !== undefined) updates['hourlyCost'] = partial.hourlyCost;
     if (partial.displayTitle !== undefined) updates['displayTitle'] = partial.displayTitle;
+    if (partial.publicDisplayMode !== undefined) updates['publicDisplayMode'] = partial.publicDisplayMode;
 
     db.update(guildTrackerConfig)
       .set(updates)
@@ -89,6 +91,15 @@ export function upsertGuildConfig(
   }
 
   return getGuildConfig(guildId)!;
+}
+
+// Returns all guild tracker configs with enabled = true.
+export function getAllEnabledConfigs(): GuildTrackerConfigRow[] {
+  return db
+    .select()
+    .from(guildTrackerConfig)
+    .where(eq(guildTrackerConfig.enabled, true))
+    .all();
 }
 
 // Returns 0 when no donation records exist for the guild/month — never null.

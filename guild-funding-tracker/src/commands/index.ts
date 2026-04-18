@@ -1,11 +1,14 @@
 // Command routing table. Maps "commandName:subcommand" to handler functions.
-// Phase 3: setup. Phase 4: add, remove, status.
+// Phase 3: setup. Phase 4: add, remove, status. Phase 5: set-hourly-cost, config, refresh.
 
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { handleSetup } from './setup';
 import { handleAdd } from './add';
 import { handleRemove } from './remove';
 import { handleStatus } from './status';
+import { handleSetHourlyCost } from './setHourlyCost';
+import { handleConfig } from './config';
+import { handleRefresh } from './refresh';
 
 type CommandHandler = (interaction: ChatInputCommandInteraction) => Promise<void>;
 
@@ -14,6 +17,9 @@ const handlers: Record<string, CommandHandler> = {
   'funding:add': handleAdd,
   'funding:remove': handleRemove,
   'funding:status': handleStatus,
+  'funding:set-hourly-cost': handleSetHourlyCost,
+  'funding:config': handleConfig,
+  'funding:refresh': handleRefresh,
 };
 
 /**

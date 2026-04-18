@@ -5,6 +5,7 @@ import { db } from './db/client';
 import { createDiscordClient } from './bot/client';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { handleInteractionCreate } from './bot/events/interactionCreate';
+import { handleReady } from './bot/events/ready';
 
 async function bootstrap(): Promise<void> {
   // Env validation happens at import time in config/env.ts — a hard exit there prevents reaching here
@@ -24,7 +25,9 @@ async function bootstrap(): Promise<void> {
   const client = createDiscordClient();
 
   client.once('ready', (c) => {
-    console.log(`[startup] Connected as ${c.user.tag}. Serving ${c.guilds.cache.size} guild(s).`);
+    handleReady(c).catch((err) => {
+      console.error('[ready] Unhandled error during startup validation:', err);
+    });
   });
 
   client.on('interactionCreate', (interaction) => {

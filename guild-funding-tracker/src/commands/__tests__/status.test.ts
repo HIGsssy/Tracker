@@ -34,12 +34,24 @@ vi.mock('../../services/fundingService', () => ({
   },
 }));
 
+vi.mock('../../services/trackerService', () => ({
+  refreshIfStale: vi.fn().mockResolvedValue(undefined),
+  TrackerError: class TrackerError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'TrackerError';
+    }
+  },
+}));
+
 import { handleStatus } from '../status';
 import { getGuildConfig, getMonthTotal, getMonthRecords } from '../../services/fundingService';
+import { refreshIfStale } from '../../services/trackerService';
 
 const mockGetGuildConfig = vi.mocked(getGuildConfig);
 const mockGetMonthTotal = vi.mocked(getMonthTotal);
 const mockGetMonthRecords = vi.mocked(getMonthRecords);
+const mockRefreshIfStale = vi.mocked(refreshIfStale);
 
 const BASE_CONFIG = {
   id: 1,
@@ -244,16 +256,49 @@ describe('/funding status — admin response', () => {
 });
 
 // ---------------------------------------------------------------------------
-// No stale-refresh invoked
+// Stale refresh after reply
 // ---------------------------------------------------------------------------
 
-describe('/funding status — no stale-refresh side effects', () => {
-  it('does not call refreshTracker at any point', async () => {
-    // refreshTracker is not mocked in this test file — if it were called, it would throw
-    // (because trackerService is not mocked). Confirm it is not imported or called.
+describe('/funding status — stale refresh wiring', () => {
+  it('calls refreshIfStale after sending the reply', async () => {
     const interaction = makeInteraction();
     await handleStatus(interaction);
-    // If we reach here without an error, refreshTracker was not called.
-    expect(true).toBe(true);
+    expect(mockRefreshIfStale).toHaveBeenCalledOnce();
+    expect(mockRefreshIfStale).toHaveBeenCalledWith('guild-001', interaction.client);
+  });
+
+  it('editReply is called before refreshIfStale', async () => {
+    const callOrder: string[] = [];
+    const interaction = makeInteraction();
+    vi.mocked(interaction.editReply).mockImplementation(async () => {
+      callOrder.push('editReply');
+      return {} as never;
+    });
+    mockRefreshIfStale.mockImplementation(async () => {
+      callOrder.push('refreshIfStale');
+    });
+    await handleStatus(interaction);
+    expect(callOrder.indexOf('editReply')).toBeLessThan(callOrder.indexOf('refreshIfStale'));
+  });
+
+  it('does not surface refreshIfStale errors to the user', async () => {
+    mockRefreshIfStale.mockRejectedValueOnce(new Error('stale refresh failed'));
+    const interaction = makeInteraction();
+    // Should complete without throwing despite stale refresh error.
+    await expect(handleStatus(interaction)).resolves.not.toThrow();
+    // The error should not appear in the reply content.
+    const editReplyCalls = vi.mocked(interaction.editReply).mock.calls;
+    const textReplies = editReplyCalls
+      .map(([arg]) => (typeof arg === 'string' ? arg : ''))
+      .filter(Boolean);
+    for (const text of textReplies) {
+      expect(text).not.toContain('stale refresh failed');
+    }
+  });
+
+  it('does not call refreshIfStale when guild is not set', async () => {
+    const interaction = makeInteraction({ guildId: null });
+    await handleStatus(interaction);
+    expect(mockRefreshIfStale).not.toHaveBeenCalled();
   });
 });

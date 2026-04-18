@@ -10,7 +10,12 @@
     "lint": "eslint src",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d bot",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f bot",
+    "docker:test": "docker compose run --rm test"
   },
   "dependencies": {
     "better-sqlite3": "^9.6.0",
