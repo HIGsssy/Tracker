@@ -67,6 +67,8 @@ export function computeFundingState(inputs: FundingInputs): FundingState {
   const fundedHours = totalFunded / hourlyCost;
   const hoursElapsed = (nowUtc.getTime() - monthStart.getTime()) / 3_600_000;
   const hoursLeft = Math.max(0, fundedHours - hoursElapsed);
+  const monthHoursLeft = Math.max(0, monthHours - hoursElapsed);
+  const displayHoursLeft = Math.min(hoursLeft, monthHoursLeft);
   const percentageFunded = Math.min(100, (fundedHours / monthHours) * 100);
   const isFullyFunded = fundedHours >= monthHours;
 
@@ -76,6 +78,8 @@ export function computeFundingState(inputs: FundingInputs): FundingState {
     fundedHours,
     hoursElapsed,
     hoursLeft,
+    monthHoursLeft,
+    displayHoursLeft,
     percentageFunded,
     isFullyFunded,
   };

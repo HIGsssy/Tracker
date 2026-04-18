@@ -28,6 +28,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   NODE_ENV: z.enum(['development', 'production']).default('development'),
+
+  // Optional: if set, the bot will auto-register slash commands for this guild
+  // at startup. Intended for development convenience only — one guild, not global.
+  DISCORD_DEV_GUILD_ID: z.string().optional(),
 });
 
 const result = envSchema.safeParse(process.env);

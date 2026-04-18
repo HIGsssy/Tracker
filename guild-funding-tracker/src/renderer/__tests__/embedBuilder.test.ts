@@ -20,6 +20,8 @@ function makeState(overrides: Partial<FundingState> = {}): FundingState {
     fundedHours: 250,
     hoursElapsed: 168,
     hoursLeft: 82,
+    monthHoursLeft: 552,    // max(0, 720 - 168)
+    displayHoursLeft: 82,   // min(82, 552)
     percentageFunded: 34.72,
     isFullyFunded: false,
     ...overrides,
@@ -152,14 +154,14 @@ describe('buildFundingEmbed description', () => {
   it('description at 0% is all empty blocks', () => {
     const embed = buildFundingEmbed(baseConfig, makeState({ percentageFunded: 0 }));
     const desc = embed.toJSON().description ?? '';
-    expect(desc).toBe(buildProgressBar(0));
+    expect(desc).toContain(buildProgressBar(0));
     expect(desc).not.toContain('█');
   });
 
   it('description at 100% is all filled blocks', () => {
     const embed = buildFundingEmbed(baseConfig, makeState({ percentageFunded: 100 }));
     const desc = embed.toJSON().description ?? '';
-    expect(desc).toBe(buildProgressBar(100));
+    expect(desc).toContain(buildProgressBar(100));
     expect(desc).not.toContain('░');
   });
 });
@@ -229,21 +231,59 @@ describe('buildFundingEmbed Last Updated field', () => {
 // buildFundingEmbed — Hours Left field with zero hours
 // ---------------------------------------------------------------------------
 describe('buildFundingEmbed with zero hours left', () => {
-  it('Hours Left field shows "0h 0m" when coverage is exhausted', () => {
-    const state = makeState({ hoursLeft: 0, percentageFunded: 34.72 });
+  it('Hours Left field shows "**0h 0m**" when coverage is exhausted', () => {
+    const state = makeState({ hoursLeft: 0, displayHoursLeft: 0, percentageFunded: 34.72 });
     const embed = buildFundingEmbed(baseConfig, state);
     const json = embed.toJSON();
     const hoursLeftField = json.fields?.find((f) => f.name === 'Hours Left');
-    expect(hoursLeftField?.value).toBe('0h 0m');
+    expect(hoursLeftField?.value).toBe('**0h 0m**');
   });
 
   it('Monthly Coverage is still non-zero when hours left is 0', () => {
     // Proves the divergence case: coverage > 0% AND hours_left = 0
-    const state = makeState({ hoursLeft: 0, percentageFunded: 34.72 });
+    const state = makeState({ hoursLeft: 0, displayHoursLeft: 0, percentageFunded: 34.72 });
     const embed = buildFundingEmbed(baseConfig, state);
     const json = embed.toJSON();
     const coverageField = json.fields?.find((f) => f.name === 'Monthly Coverage');
     expect(coverageField?.value).not.toBe('0%');
     expect(coverageField?.value).toBe('34.7%');
+  });
+
+  it('Hours Left is capped to remaining calendar hours when overfunded', () => {
+    // fundedHoursLeft > monthHoursLeft → displayHoursLeft = monthHoursLeft
+    const state = makeState({ hoursLeft: 401, monthHoursLeft: 288, displayHoursLeft: 288, percentageFunded: 100 });
+    const embed = buildFundingEmbed(baseConfig, state);
+    const json = embed.toJSON();
+    const hoursLeftField = json.fields?.find((f) => f.name === 'Hours Left');
+    expect(hoursLeftField?.value).toBe('**288h 0m**');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildFundingEmbed — flavor line
+// ---------------------------------------------------------------------------
+describe('buildFundingEmbed flavor line', () => {
+  it('shows critical flavor when displayHoursLeft <= 4', () => {
+    const desc = buildFundingEmbed(baseConfig, makeState({ hoursLeft: 2, displayHoursLeft: 2, percentageFunded: 30 }))
+      .toJSON().description ?? '';
+    expect(desc).toContain("clock's ticking");
+  });
+
+  it('shows low flavor when percentageFunded < 25 and displayHoursLeft > 4', () => {
+    const desc = buildFundingEmbed(baseConfig, makeState({ hoursLeft: 100, displayHoursLeft: 100, percentageFunded: 10 }))
+      .toJSON().description ?? '';
+    expect(desc).toContain('running on fumes');
+  });
+
+  it('shows mid flavor when percentageFunded is 25–74 and displayHoursLeft > 4', () => {
+    const desc = buildFundingEmbed(baseConfig, makeState({ hoursLeft: 100, displayHoursLeft: 100, percentageFunded: 50 }))
+      .toJSON().description ?? '';
+    expect(desc).toContain('holding steady');
+  });
+
+  it('shows high flavor when percentageFunded >= 75 and displayHoursLeft > 4', () => {
+    const desc = buildFundingEmbed(baseConfig, makeState({ hoursLeft: 100, displayHoursLeft: 100, percentageFunded: 80 }))
+      .toJSON().description ?? '';
+    expect(desc).toContain('looking real comfortable');
   });
 });

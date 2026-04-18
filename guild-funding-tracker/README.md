@@ -35,6 +35,8 @@ cp .env.example .env          # macOS/Linux
 # 2. Register slash commands (run once, or after command changes)
 npx tsx src/bot/deploy-commands.ts --guild-id=YOUR_GUILD_ID
 
+# Alternatively, set DISCORD_DEV_GUILD_ID=YOUR_GUILD_ID in .env to auto-register at startup
+
 # 3. Start the bot
 npm run docker:up
 

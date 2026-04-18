@@ -231,3 +231,58 @@ describe('computeFundingState', () => {
     ).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// computeFundingState — displayHoursLeft capping
+// ---------------------------------------------------------------------------
+describe('computeFundingState displayHoursLeft', () => {
+  // April 19 00:00 UTC = 18 days elapsed = 432h; monthHoursLeft = 720 - 432 = 288h
+  const eighteenDaysIn = new Date('2026-04-19T00:00:00.000Z');
+  const sevenDaysIn    = new Date('2026-04-08T00:00:00.000Z'); // 168h elapsed
+
+  it('displayHoursLeft equals funded_hours_left when it is less than calendar hours remaining', () => {
+    // 15 / 0.06 = 250 funded hours; 168h elapsed; hoursLeft=82; monthHoursLeft=552; display=82
+    const state = computeFundingState({ totalFunded: 15, hourlyCost: 0.06, nowUtc: sevenDaysIn });
+    expect(state.hoursLeft).toBeCloseTo(82, 1);
+    expect(state.monthHoursLeft).toBeCloseTo(552, 1);
+    expect(state.displayHoursLeft).toBeCloseTo(82, 1); // min(82, 552) — funded wins
+  });
+
+  it('displayHoursLeft is capped to monthHoursLeft when funded runtime exceeds calendar remainder', () => {
+    // 50 / 0.06 = 833.33 funded hours; 432h elapsed; hoursLeft=401.33; monthHoursLeft=288; display=288
+    const state = computeFundingState({ totalFunded: 50, hourlyCost: 0.06, nowUtc: eighteenDaysIn });
+    expect(state.hoursLeft).toBeCloseTo(401.33, 1);
+    expect(state.monthHoursLeft).toBeCloseTo(288, 1);
+    expect(state.displayHoursLeft).toBeCloseTo(288, 1); // min(401.33, 288) — calendar wins
+  });
+
+  it('100%-funded month late in the month: displayHoursLeft shows remaining calendar hours only', () => {
+    // Exactly 100% funded (43.20 / 0.06 = 720h) with 12 days remaining (432h elapsed)
+    const state = computeFundingState({ totalFunded: 43.20, hourlyCost: 0.06, nowUtc: eighteenDaysIn });
+    expect(state.isFullyFunded).toBe(true);
+    expect(state.monthHoursLeft).toBeCloseTo(288, 1);
+    expect(state.displayHoursLeft).toBeCloseTo(288, 1);
+  });
+
+  it('overfunded: displayHoursLeft is always capped to remaining calendar hours', () => {
+    // 100 / 0.06 = 1666.67 funded hours; 432h elapsed; hoursLeft=1234.67; monthHoursLeft=288
+    const state = computeFundingState({ totalFunded: 100, hourlyCost: 0.06, nowUtc: eighteenDaysIn });
+    expect(state.hoursLeft).toBeCloseTo(1234.67, 1);
+    expect(state.monthHoursLeft).toBeCloseTo(288, 1);
+    expect(state.displayHoursLeft).toBeCloseTo(288, 1); // never shows funded surplus
+  });
+
+  it('monthHoursLeft is zero at the last instant of the month', () => {
+    const lastInstant = new Date('2026-04-30T23:59:59.999Z');
+    const state = computeFundingState({ totalFunded: 10, hourlyCost: 0.06, nowUtc: lastInstant });
+    expect(state.monthHoursLeft).toBeCloseTo(0, 1);
+    expect(state.displayHoursLeft).toBe(0);
+  });
+
+  it('Monthly Coverage (percentageFunded) is unaffected by the displayHoursLeft cap', () => {
+    // Overfunded late in month: coverage must still be 100%, not reduced by the display cap
+    const state = computeFundingState({ totalFunded: 50, hourlyCost: 0.06, nowUtc: eighteenDaysIn });
+    expect(state.percentageFunded).toBe(100);
+    expect(state.displayHoursLeft).toBeCloseTo(288, 1); // display is capped
+  });
+});

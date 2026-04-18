@@ -17,6 +17,17 @@ function getEmbedColor(percentageFunded: number): number {
   return 0xed4245;                              // red
 }
 
+/**
+ * Returns a short one-line flavor string matching the current funding state.
+ * Tone: slightly edgy, late-night community vibe. Confident, not desperate.
+ */
+function getFlavorLine(percentageFunded: number, hoursLeft: number): string {
+  if (hoursLeft <= 4)        return "clock's ticking\u2026 fast.";
+  if (percentageFunded < 25) return "running on fumes \u2014 this won't hold long.";
+  if (percentageFunded < 75) return "holding steady, but we're not safe yet.";
+  return 'looking real comfortable right now.';
+}
+
 /** Formats hours left as "387h 42m" or "0h 0m". */
 export function formatHoursLeft(hoursLeft: number): string {
   if (hoursLeft <= 0) return '0h 0m';
@@ -42,22 +53,23 @@ function formatMonthLabel(monthKey: string): string {
  *
  * Field labels are intentional and must not be changed:
  *   "Monthly Coverage" — fraction of month runtime funded (from percentageFunded)
- *   "Hours Left"       — remaining funded runtime right now
+ *   "Hours Left"       — min(funded_hours_left, month_hours_left); capped to calendar month end
  *   "Last Updated"     — Discord relative timestamp from config.updatedAt
  */
 export function buildFundingEmbed(config: EmbedConfigInput, state: FundingState): EmbedBuilder {
   const monthLabel = formatMonthLabel(state.monthKey);
   const progressBar = buildProgressBar(state.percentageFunded);
+  const flavorLine = getFlavorLine(state.percentageFunded, state.displayHoursLeft);
   const updatedAtUnix = Math.floor(new Date(config.updatedAt).getTime() / 1000);
 
   return new EmbedBuilder()
     .setTitle(`${config.displayTitle} — ${monthLabel}`)
-    .setDescription(progressBar)
+    .setDescription(`${progressBar}\n${flavorLine}`)
     .setColor(getEmbedColor(state.percentageFunded))
     .addFields(
-      { name: 'Monthly Coverage', value: formatCoverage(state.percentageFunded), inline: true },
-      { name: 'Hours Left',       value: formatHoursLeft(state.hoursLeft),        inline: true },
-      { name: 'Last Updated',     value: `<t:${updatedAtUnix}:R>`,                inline: false },
+      { name: 'Monthly Coverage', value: formatCoverage(state.percentageFunded),              inline: true },
+      { name: 'Hours Left',       value: `**${formatHoursLeft(state.displayHoursLeft)}**`,    inline: true },
+      { name: 'Last Updated',     value: `<t:${updatedAtUnix}:R>`,                            inline: false },
     )
-    .setFooter({ text: 'Running on community support' });
+    .setFooter({ text: 'keeping the lights on — community funded' });
 }

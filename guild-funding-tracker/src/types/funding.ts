@@ -8,13 +8,15 @@ export interface FundingInputs {
 }
 
 export interface FundingState {
-  monthKey: string;         // YYYY-MM, UTC
-  monthHours: number;       // total hours in the calendar month
-  fundedHours: number;      // totalFunded / hourlyCost
-  hoursElapsed: number;     // hours since UTC month start at nowUtc
-  hoursLeft: number;        // max(0, fundedHours - hoursElapsed) — derived, never stored
-  percentageFunded: number; // 0–100, capped; internal name — maps to "Monthly Coverage" in embed ONLY
-  isFullyFunded: boolean;   // fundedHours >= monthHours
+  monthKey: string;           // YYYY-MM, UTC
+  monthHours: number;         // total hours in the calendar month
+  fundedHours: number;        // totalFunded / hourlyCost
+  hoursElapsed: number;       // hours since UTC month start at nowUtc
+  hoursLeft: number;          // max(0, fundedHours - hoursElapsed) — funded runtime remaining
+  monthHoursLeft: number;     // max(0, monthHours - hoursElapsed) — calendar hours remaining in month
+  displayHoursLeft: number;   // min(hoursLeft, monthHoursLeft) — what the embed shows; never stored
+  percentageFunded: number;   // 0–100, capped; internal name — maps to "Monthly Coverage" in embed ONLY
+  isFullyFunded: boolean;     // fundedHours >= monthHours
 }
 
 // Minimal config shape the embed builder needs.
