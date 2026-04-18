@@ -42,13 +42,27 @@ vi.mock('../../../services/trackerService', () => ({
   },
 }));
 
+vi.mock('../../../services/archiveService', () => ({
+  archiveMonth: vi.fn(),
+  getMonthArchive: vi.fn().mockReturnValue({ id: 1, monthKey: '2026-03' }), // default: archive exists
+}));
+
+vi.mock('../../../services/calculationService', () => ({
+  getPreviousMonthKey: vi.fn().mockReturnValue('2026-03'),
+}));
+
 import { handleReady } from '../ready';
 import { getAllEnabledConfigs, upsertGuildConfig } from '../../../services/fundingService';
 import { refreshIfStale } from '../../../services/trackerService';
+import { archiveMonth, getMonthArchive } from '../../../services/archiveService';
+import { getPreviousMonthKey } from '../../../services/calculationService';
 
 const mockGetAllEnabledConfigs = vi.mocked(getAllEnabledConfigs);
 const mockUpsertGuildConfig = vi.mocked(upsertGuildConfig);
 const mockRefreshIfStale = vi.mocked(refreshIfStale);
+const mockArchiveMonth = vi.mocked(archiveMonth);
+const mockGetMonthArchive = vi.mocked(getMonthArchive);
+const mockGetPreviousMonthKey = vi.mocked(getPreviousMonthKey);
 
 const GUILD_ID = 'guild-001';
 const CHANNEL_ID = 'ch-001';
@@ -113,6 +127,9 @@ function makeClient(options: {
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetAllEnabledConfigs.mockReturnValue([]);
+  // Default: previous month archive already exists — skips recovery.
+  mockGetMonthArchive.mockReturnValue({ id: 1, monthKey: '2026-03' } as ReturnType<typeof getMonthArchive>);
+  mockGetPreviousMonthKey.mockReturnValue('2026-03');
 });
 
 // ---------------------------------------------------------------------------
@@ -249,5 +266,58 @@ describe('handleReady — per-guild error isolation', () => {
     const client = makeClient();
     await expect(handleReady(client)).resolves.not.toThrow();
     expect(mockRefreshIfStale).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Missed-archive recovery
+// ---------------------------------------------------------------------------
+
+describe('handleReady — missed archive recovery', () => {
+  it('calls archiveMonth when no previous-month archive exists', async () => {
+    mockGetAllEnabledConfigs.mockReturnValue([makeConfig()]);
+    mockGetMonthArchive.mockReturnValue(null); // no existing archive
+    const client = makeClient();
+    await handleReady(client);
+    expect(mockArchiveMonth).toHaveBeenCalledWith(GUILD_ID, '2026-03');
+  });
+
+  it('does not call archiveMonth when the previous-month archive already exists', async () => {
+    mockGetAllEnabledConfigs.mockReturnValue([makeConfig()]);
+    // default mock returns a non-null archive — archive already exists
+    const client = makeClient();
+    await handleReady(client);
+    expect(mockArchiveMonth).not.toHaveBeenCalled();
+  });
+
+  it('archive recovery runs even when trackerChannelId is null', async () => {
+    mockGetAllEnabledConfigs.mockReturnValue([makeConfig({ trackerChannelId: null })]);
+    mockGetMonthArchive.mockReturnValue(null);
+    const client = makeClient();
+    await handleReady(client);
+    expect(mockArchiveMonth).toHaveBeenCalledWith(GUILD_ID, '2026-03');
+  });
+
+  it('logs and continues when archiveMonth throws for a guild', async () => {
+    mockGetAllEnabledConfigs.mockReturnValue([makeConfig()]);
+    mockGetMonthArchive.mockReturnValue(null);
+    mockArchiveMonth.mockImplementationOnce(() => {
+      throw new Error('Archive DB error');
+    });
+    const client = makeClient();
+    // Should not throw — per-guild errors are caught and logged
+    await expect(handleReady(client)).resolves.not.toThrow();
+  });
+
+  it('archive recovery failure does not prevent stale-refresh from running', async () => {
+    mockGetAllEnabledConfigs.mockReturnValue([makeConfig()]);
+    mockGetMonthArchive.mockReturnValue(null);
+    mockArchiveMonth.mockImplementationOnce(() => {
+      throw new Error('Archive DB error');
+    });
+    const client = makeClient();
+    await handleReady(client);
+    // refreshIfStale should still be called despite the archive failure
+    expect(mockRefreshIfStale).toHaveBeenCalledWith(GUILD_ID, client);
   });
 });

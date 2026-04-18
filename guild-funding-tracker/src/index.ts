@@ -6,6 +6,7 @@ import { createDiscordClient } from './bot/client';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { handleInteractionCreate } from './bot/events/interactionCreate';
 import { handleReady } from './bot/events/ready';
+import { startMonthlyResetScheduler } from './scheduler/monthlyReset';
 
 async function bootstrap(): Promise<void> {
   // Env validation happens at import time in config/env.ts — a hard exit there prevents reaching here
@@ -46,12 +47,17 @@ async function bootstrap(): Promise<void> {
   process.once('SIGINT', shutdown);
 
   // Log in with token — exits non-zero on failure
+  console.log('[startup] Discord login starting.');
   try {
     await client.login(config.DISCORD_TOKEN);
   } catch (err) {
     console.error('[startup] Discord login failed:', err);
     process.exit(1);
   }
+
+  // Start the monthly archive scheduler after successful login (self-rescheduling setTimeout — no polling)
+  startMonthlyResetScheduler(client);
+  console.log('[startup] Monthly reset scheduler started.');
 }
 
 bootstrap().catch((err) => {

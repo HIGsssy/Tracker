@@ -4,15 +4,18 @@
 // Responsibilities:
 // 1. Log connected guilds.
 // 2. Iterate enabled guild tracker configs.
-// 3. Validate tracker channel/message still exist; clear stale IDs on Discord errors.
-// 4. Call refreshIfStale for guilds that remain valid after recovery.
+// 3. Recover missing previous-month archives (DB-only, non-destructive).
+// 4. Validate tracker channel/message still exist; clear stale IDs on Discord errors.
+// 5. Call refreshIfStale for guilds that remain valid after recovery.
 //
-// Does NOT: archive months, run month reset, post recovery messages to Discord,
+// Does NOT: run month reset on multiple historical months, post recovery messages to Discord,
 // or perform any timer-based operations.
 
 import { ChannelType, type Client, type TextChannel } from 'discord.js';
 import { getAllEnabledConfigs, upsertGuildConfig } from '../../services/fundingService';
 import { refreshIfStale } from '../../services/trackerService';
+import { archiveMonth, getMonthArchive } from '../../services/archiveService';
+import { getPreviousMonthKey } from '../../services/calculationService';
 
 function isDiscordApiError(err: unknown, code: number): boolean {
   return (
@@ -37,8 +40,26 @@ export async function handleReady(client: Client<true>): Promise<void> {
 
   for (const cfg of configs) {
     try {
+      // Step 1: Recover missing previous-month archive (DB-only, non-destructive).
+      const prevMonthKey = getPreviousMonthKey(new Date());
+      const existingArchive = getMonthArchive(cfg.guildId, prevMonthKey);
+      if (!existingArchive) {
+        try {
+          archiveMonth(cfg.guildId, prevMonthKey);
+          console.log(
+            `[ready] Guild ${cfg.guildId}: recovered missing archive for ${prevMonthKey}.`,
+          );
+        } catch (archiveErr) {
+          console.error(
+            `[ready] Guild ${cfg.guildId}: failed to recover archive for ${prevMonthKey}:`,
+            archiveErr,
+          );
+        }
+      }
+
+      // Step 2: Validate tracker channel/message still exist.
       if (!cfg.trackerChannelId) {
-        // No channel configured — nothing to validate.
+        // No channel configured — skip Discord validation but archive recovery already ran.
         continue;
       }
 

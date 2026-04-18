@@ -121,6 +121,28 @@ const fundingCommand = new SlashCommandBuilder()
     sub
       .setName('refresh')
       .setDescription('Force re-render and re-post the tracker embed (use to recover after deletion)'),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('reset-month')
+      .setDescription('Archive a month\'s funding state (default: previous month)')
+      .addStringOption((opt) =>
+        opt
+          .setName('month')
+          .setDescription('Month to archive in YYYY-MM format (default: previous month)')
+          .setRequired(false),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('history')
+      .setDescription('View archived monthly funding summaries')
+      .addStringOption((opt) =>
+        opt
+          .setName('month')
+          .setDescription('Specific month to view in YYYY-MM format (default: recent months)')
+          .setRequired(false),
+      ),
   );
 
 async function main(): Promise<void> {
