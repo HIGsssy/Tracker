@@ -21,7 +21,7 @@ vi.mock('../../db/client', async () => {
 });
 
 import { db } from '../../db/client';
-import { guildTrackerConfig, donationRecord } from '../../db/schema';
+import { guildTrackerConfig, donationRecord, monthArchive } from '../../db/schema';
 import {
   archiveMonth,
   archiveAllGuildsForMonth,
@@ -69,8 +69,9 @@ function insertDonation(guildId: string, monthKey: string, amount: number): void
 
 beforeEach(() => {
   // Wipe tables before each test.
-  db.delete(guildTrackerConfig).run();
+  db.delete(monthArchive).run();
   db.delete(donationRecord).run();
+  db.delete(guildTrackerConfig).run();
 });
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,23 @@
+# Environment — contains real Discord tokens and secrets
+.env
+
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# SQLite database files (local dev only — production data lives in Docker volume)
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
