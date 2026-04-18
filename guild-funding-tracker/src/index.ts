@@ -8,6 +8,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { handleInteractionCreate } from './bot/events/interactionCreate';
 import { handleReady } from './bot/events/ready';
 import { startMonthlyResetScheduler } from './scheduler/monthlyReset';
+import { startHourlyEmbedRefreshScheduler } from './scheduler/embedRefresh';
 import { fundingCommand } from './bot/commandsDefinition';
 
 /**
@@ -89,6 +90,10 @@ async function bootstrap(): Promise<void> {
   // Start the monthly archive scheduler after successful login (self-rescheduling setTimeout — no polling)
   startMonthlyResetScheduler(client);
   console.log('[startup] Monthly reset scheduler started.');
+
+  // Start the hourly embed refresh scheduler (self-rescheduling setTimeout — aligned to UTC clock hour)
+  startHourlyEmbedRefreshScheduler(client);
+  console.log('[startup] Hourly embed refresh scheduler started.');
 }
 
 bootstrap().catch((err) => {
